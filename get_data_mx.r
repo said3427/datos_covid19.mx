@@ -1,29 +1,35 @@
 # Bibliotecas necesarias
-## install.packages(c("tabulizer","dplyr","lubridate","stringr"))
+
 library("tabulizer")
 library("dplyr")
 library("lubridate")
 library("stringr")
-
+library("tidyRSS")
 # Lectura de archivos oficiales
 
+## RSS feed
+gobMX<- xmlParse("http://fetchrss.com/rss/5e7304aa8a93f815318b45675e7303918a93f816258b4567.atom")
+gobMX<- xmlToDataFrame(gobMX)
+pdf_file<-gobMX$id[grepl(pattern = "casos_positivos",gobMX$id)]
 ## PDF actualizado
-pdf_file <- "https://www.gob.mx/cms/uploads/attachment/file/541827/Tabla_casos_positivos_resultado_InDRE_2020.03.17.pdf"
+#pdf_file <- "https://www.gob.mx/cms/uploads/attachment/file/542104/Tabla_casos_positivos_COVID-19_resultado_InDRE_2020.03.18.pdf"
 
 out <- extract_tables(pdf_file)
 ## Concatena las tablas de todas las hojas
-final <- do.call(rbind, out)
+final <- do.call(rbind, out[-1])
 
 ## Remueve las primeras filas que corresponden al encabezado
-final<-data.frame(final[-1:-max(which(final[,1]=="")),])
+final<-data.frame(final)
 
 colnames(final)<-c("Caso","Estado","Sexo","Edad","Inicio","Confirmación","Procedencia","Llegada")
 
-## Escribe la base mexicana
-write.csv(final,file="data/covid19_cases.csv",quote=F,row.names = F)
+final$Reporte<-ymd(today())
+referencia<-data.table::fread("https://gist.githubusercontent.com/said3427/18f39eab460766a17ea4802607dd5522/raw")
 
-# Modificación al ejemplo Midas
-## Corrección de formato de fechas
+duprows <- final$Caso %in% referencia$Caso
+final<-rbind(referencia, final[!duprows,],use.names=F)
+
+
 final$Inicio<-ymd(as.Date(final$Inicio,format="%d/%m/%y"))
 final$Llegada<-ymd(as.Date(final$Llegada,format="%d/%m/%y"))
 
@@ -32,6 +38,12 @@ final$Estado<-str_to_title(final$Estado)
 
 ## Cambiar la M por male y F por female
 final$Sexo<-str_replace_all(final$Sexo,c("M"="male","F"="female"))
+
+## Escribe la base mexicana
+write.csv(final,file="covid19_cases.csv",quote=F,row.names = F)
+
+# Modificación al ejemplo Midas
+## Corrección de formato de fechas
 
 ## Cambiar el Procedencia: Contacto por NA, los otros campos son paises
 final$Procedencia[final$Procedencia=="Contacto"]<-NA
